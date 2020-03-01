@@ -3,8 +3,10 @@ const firebase = require('firebase');
 const config = require('../util/config');
 firebase.initializeApp(config);
 
-const {validateSignupData,validateLoginData} = require('../util/validators');
+const {validateSignupData,validateLoginData,reduceUserDetails} = require('../util/validators');
 
+
+//Signup New user
 exports.signup = (req,res)=>{    
     const newUser = {
         email: req.body.email,
@@ -57,6 +59,8 @@ exports.signup = (req,res)=>{
     });
 };
 
+
+// Login User
 exports.login = (req,res)=>{
     const user = {
         email: req.body.email,
@@ -84,23 +88,24 @@ exports.login = (req,res)=>{
 let imageFileName;
 let imageToBeUploaded = {};
 
+
+// Upload User Profile Image
 exports.uploadImage = (req,res)=>{
    const BusBoy = require('busboy');
    const path = require('path');
    const os = require('os');
    const fs = require('fs');
    const busboy = new BusBoy({headers: req.headers});
-   busboy.on('file',(fieldName,file,fileName,encoding,mimeType)=>{
-
-       console.log('fieldName',fieldName);       
-       console.log('fileName',fileName);       
-       console.log('mimeType',mimeType);
-
-       const imageExtension = fileName.split('.')[fileName.split('.').length - 1];
-       imageFileName = `${Math.round(Math.random()*100000000)}.${imageExtension}`;
-       const filePath = path.join(os.tmpdir(),imageFileName);
-       imageToBeUploaded = {filePath, mimeType};
-       file.pipe(fs.createWriteStream(filePath));
+   busboy.on('file',(fieldName,file,fileName,encoding,mimeType)=>{    
+    if(mimeType !== 'image/jpeg' && mimeType !== 'image/png')
+    {
+        return res.status(400).json({error: 'Wrong file type submitted'});
+    }
+    const imageExtension = fileName.split('.')[fileName.split('.').length - 1];
+    imageFileName = `${Math.round(Math.random()*100000000)}.${imageExtension}`;
+    const filePath = path.join(os.tmpdir(),imageFileName);
+    imageToBeUploaded = {filePath, mimeType};
+    file.pipe(fs.createWriteStream(filePath));
    });
    busboy.on('finish',()=>{
     admin.storage().bucket(config.storageBucket).upload(imageToBeUploaded.filePath,{
@@ -124,4 +129,42 @@ exports.uploadImage = (req,res)=>{
     });
    });
    busboy.end(req.rawBody);
+};
+
+
+// Add User Details
+exports.addUserDetails = (req,res)=>{
+    let userDetails = reduceUserDetails(req.body);
+    db.doc(`/users/${req.user.handle}`).update(userDetails)
+    .then(()=>{
+        return res.json({message: 'Details added successfully'});
+    })
+    .catch(err => {
+        console.error(err);
+        return res.status(500).json({error: err.code});
+    });
+};
+
+//Get Authenticated User
+exports.getAuthenticatedUser = (req,res)=>{
+    let userData = {};
+    db.doc(`/users/${req.user.handle}`).get()
+    .then(doc=>{
+        if(doc.exists)
+        {
+            userData.credentials = doc.data();
+            return db.collection('likes').where('userHandle','==',req.user.handle).get();
+        }
+    })
+    .then(data => {
+        userData.likes = [];
+        data.forEach(doc => {
+            userData.likes.push(doc.data());
+        });
+        return res.json(userData);
+    })
+    .catch(err => {
+        console.error(err);
+        return res.status(500).json({error: err.code});
+    });
 };
