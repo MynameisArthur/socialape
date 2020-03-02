@@ -179,7 +179,6 @@ exports.unlikeScream = (req,res)=>{
         return res.status(500).json({error: err.code});
     });
 };
-
 // Delete A Scream
 exports.deleteScream = (req,res)=>{
     const document = db.doc(`/screams/${req.params.screamId}`);
